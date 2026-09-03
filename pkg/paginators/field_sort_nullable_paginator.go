@@ -21,6 +21,20 @@ func NewFieldSortNullablePaginator[ItemType any](
 	return &FieldSortNullablePaginator[ItemType]{FieldSortPaginator: NewFieldSortPaginator(qb, pagination, opts...)}
 }
 
+func (f *FieldSortNullablePaginator[ItemType]) Paginate() error {
+	ids, err := f.getIds()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	f.items, err = f.fetchItems(ids)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 func (f *FieldSortNullablePaginator[ItemType]) getIds() ([]int, error) {
 	qb := f.qb.Clone()
 

@@ -3,7 +3,6 @@ package paginators
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	gdh "github.com/KoNekoD/gormite/pkg/gormite_databases_helpers"
@@ -113,7 +112,8 @@ func (f *FieldSortPaginator[ItemType]) getIds() ([]int, error) {
 	qb.
 		Select(f.alias+".id").
 		SetMaxResults(f.limit+1).
-		AddOrderBy(fmt.Sprintf("%s.%s, %s.id", f.sortAlias, f.sortColumn, f.alias), sortOrder)
+		AddOrderBy(f.sortAlias+"."+f.sortColumn, sortOrder).
+		AddOrderBy(f.alias+".id", sortOrder)
 
 	sql, err := qb.GetSQL()
 	if err != nil {
@@ -130,7 +130,8 @@ func (f *FieldSortPaginator[ItemType]) fetchItems(ids []int) ([]*ItemType, error
 
 	qb.
 		SetMaxResults(f.limit+1).
-		AddOrderBy(fmt.Sprintf("%s.%s, %s.id", f.sortAlias, f.sortColumn, f.alias), sortOrder)
+		AddOrderBy(f.sortAlias+"."+f.sortColumn, sortOrder).
+		AddOrderBy(f.alias+".id", sortOrder)
 
 	if len(ids) > 0 {
 		qb.AndWhere(qb.Expr().In(f.alias+".id", qb.PrepareInArgsInt(ids)))

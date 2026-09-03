@@ -16,40 +16,33 @@ type FieldSortPaginator[ItemType any] struct {
 	*BaseSortPaginator[ItemType]
 	qb             *gormite_query_builders.QueryBuilder[ItemType]
 	alias          string
+	sortAlias      string
 	startFromId    *int
 	startFromField any
 }
 
-type fieldSortPaginatorOptions struct {
-	convertFieldToTime bool
-}
+type FieldSortPaginatorOpt[ItemType any] func(*FieldSortPaginator[ItemType])
 
-type FieldSortPaginatorOption func(*fieldSortPaginatorOptions)
-
-func ConvertFieldToTime() FieldSortPaginatorOption {
-	return func(o *fieldSortPaginatorOptions) {
-		o.convertFieldToTime = true
+func WithFieldSortPaginatorSortAlias[ItemType any](sortAlias string) FieldSortPaginatorOpt[ItemType] {
+	return func(p *FieldSortPaginator[ItemType]) {
+		p.sortAlias = sortAlias
 	}
 }
 
 func NewFieldSortPaginator[ItemType any](
 	qb *gormite_query_builders.QueryBuilder[ItemType],
 	pagination *PaginationSortDto,
-	options ...FieldSortPaginatorOption,
+	opts ...FieldSortPaginatorOpt[ItemType],
 ) *FieldSortPaginator[ItemType] {
-	opts := &fieldSortPaginatorOptions{}
-	for _, fn := range options {
-		fn(opts)
-	}
-
 	if pagination != nil && pagination.SortDirection == nil {
 		defaultOrder := SortDirectionDesc
 		pagination.SortDirection = &defaultOrder
 	}
 
 	v := &FieldSortPaginator[ItemType]{
-		qb:    qb,
-		alias: qb.GetRootAliases()[0],
+		qb:        qb,
+		alias:     qb.GetRootAliases()[0],
+		sortAlias: qb.GetRootAliases()[0],
 	}
 
 	v.BaseSortPaginator = NewBaseSortPaginator[ItemType](pagination, v)
@@ -82,6 +75,10 @@ func NewFieldSortPaginator[ItemType any](
 		}
 	}
 
+	for _, opt := range opts {
+		opt(v)
+	}
+
 	return v
 }
 
@@ -102,22 +99,21 @@ func (f *FieldSortPaginator[ItemType]) Paginate() error {
 func (f *FieldSortPaginator[ItemType]) getIds() ([]int, error) {
 	qb := f.qb.Clone()
 
-	rootAlias := qb.GetRootAliases()[0]
 	sortOrder := f.getSortOrderParam()
 
 	if f.startFromId != nil {
 		compareOperator := f.getSortCompareOperatorParam()
 
-		where := rootAlias + "." + f.sortColumn + " " + compareOperator + " :field " +
-			"OR " + rootAlias + "." + f.sortColumn + " = :field AND " + rootAlias + ".id " + compareOperator + " :id"
+		where := f.sortAlias + "." + f.sortColumn + " " + compareOperator + " :field " +
+			"OR " + f.sortAlias + "." + f.sortColumn + " = :field AND " + f.alias + ".id " + compareOperator + " :id"
 
 		qb.AndWhere(where).SetParameter("id", f.startFromId).SetParameter("field", f.startFromField)
 	}
 
 	qb.
-		Select(rootAlias+".id").
+		Select(f.alias+".id").
 		SetMaxResults(f.limit+1).
-		AddOrderBy(fmt.Sprintf("%s.%s, %s.id", rootAlias, f.sortColumn, rootAlias), sortOrder)
+		AddOrderBy(fmt.Sprintf("%s.%s, %s.id", f.sortAlias, f.sortColumn, f.alias), sortOrder)
 
 	sql, err := qb.GetSQL()
 	if err != nil {
@@ -130,15 +126,14 @@ func (f *FieldSortPaginator[ItemType]) getIds() ([]int, error) {
 func (f *FieldSortPaginator[ItemType]) fetchItems(ids []int) ([]*ItemType, error) {
 	qb := f.qb.Clone()
 
-	rootAlias := qb.GetRootAliases()[0]
 	sortOrder := f.getSortOrderParam()
 
 	qb.
 		SetMaxResults(f.limit+1).
-		AddOrderBy(fmt.Sprintf("%s.%s, %s.id", rootAlias, f.sortColumn, rootAlias), sortOrder)
+		AddOrderBy(fmt.Sprintf("%s.%s, %s.id", f.sortAlias, f.sortColumn, f.alias), sortOrder)
 
 	if len(ids) > 0 {
-		qb.AndWhere(qb.Expr().In(rootAlias+".id", qb.PrepareInArgsInt(ids)))
+		qb.AndWhere(qb.Expr().In(f.alias+".id", qb.PrepareInArgsInt(ids)))
 	}
 
 	return qb.GetResult()

@@ -2,23 +2,84 @@ package paginators
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	gdh "github.com/KoNekoD/gormite/pkg/gormite_databases_helpers"
+
 	"github.com/KoNekoD/gormite/pkg/gormite_query_builders"
 	"github.com/pkg/errors"
 )
 
 type FieldSortNullablePaginator[ItemType any] struct {
-	*FieldSortPaginator[ItemType]
+	*BaseSortPaginator[ItemType]
+	qb             *gormite_query_builders.QueryBuilder[ItemType]
+	alias          string
+	sortAlias      string
+	startFromId    *int
+	startFromField any
+}
+
+type FieldSortNullablePaginatorOpt[ItemType any] func(*FieldSortNullablePaginator[ItemType])
+
+func WithFieldSortNullablePaginatorSortAlias[ItemType any](sortAlias string) FieldSortNullablePaginatorOpt[ItemType] {
+	return func(p *FieldSortNullablePaginator[ItemType]) {
+		p.sortAlias = sortAlias
+	}
 }
 
 func NewFieldSortNullablePaginator[ItemType any](
 	qb *gormite_query_builders.QueryBuilder[ItemType],
 	pagination *PaginationSortDto,
-	opts ...FieldSortPaginatorOpt[ItemType],
+	opts ...FieldSortNullablePaginatorOpt[ItemType],
 ) *FieldSortNullablePaginator[ItemType] {
-	return &FieldSortNullablePaginator[ItemType]{FieldSortPaginator: NewFieldSortPaginator(qb, pagination, opts...)}
+	if pagination != nil && pagination.SortDirection == nil {
+		defaultOrder := SortDirectionDesc
+		pagination.SortDirection = &defaultOrder
+	}
+
+	v := &FieldSortNullablePaginator[ItemType]{
+		qb:        qb,
+		alias:     qb.GetRootAliases()[0],
+		sortAlias: qb.GetRootAliases()[0],
+	}
+
+	v.BaseSortPaginator = NewBaseSortPaginator[ItemType](pagination, v)
+
+	if v.startFrom != nil {
+		compositeStartFrom := make(map[string]any)
+
+		err := json.Unmarshal([]byte(*v.startFrom), &compositeStartFrom)
+		if err == nil {
+			id, okId := compositeStartFrom["id"]
+			field, okField := compositeStartFrom["field"]
+			if okId && okField {
+				idFloat, ok1 := id.(float64)
+				fieldString, ok2 := field.(string)
+				_, ok3 := field.(int)
+
+				if ok1 {
+					idInt := int(idFloat)
+					v.startFromId = &idInt
+
+					if ok2 {
+						fieldTime, _ := time.Parse(time.RFC3339, fieldString)
+						v.startFromField = fieldTime
+					} else if ok3 {
+						v.startFromField = &field
+					}
+				}
+
+			}
+		}
+	}
+
+	for _, opt := range opts {
+		opt(v)
+	}
+
+	return v
 }
 
 func (f *FieldSortNullablePaginator[ItemType]) Paginate() error {
@@ -53,8 +114,7 @@ func (f *FieldSortNullablePaginator[ItemType]) getIds() ([]int, error) {
 	qb.
 		Select(f.alias+".id").
 		SetMaxResults(f.limit+1).
-		AddOrderBy(sortField, sortOrder).
-		AddOrderBy(f.alias+".id", sortOrder)
+		AddOrderBy(fmt.Sprintf("%s, %s.id", sortField, f.alias), sortOrder)
 
 	sql, err := qb.GetSQL()
 	if err != nil {
@@ -72,12 +132,45 @@ func (f *FieldSortNullablePaginator[ItemType]) fetchItems(ids []int) ([]*ItemTyp
 
 	qb.
 		SetMaxResults(f.limit+1).
-		AddOrderBy(sortField, sortOrder).
-		AddOrderBy(f.alias+".id", sortOrder)
+		AddOrderBy(fmt.Sprintf("%s, %s.id", sortField, f.alias), sortOrder)
 
 	if len(ids) > 0 {
 		qb.AndWhere(qb.Expr().In(f.alias+".id", qb.PrepareInArgsInt(ids)))
 	}
 
 	return qb.GetResult()
+}
+
+func (f *FieldSortNullablePaginator[ItemType]) getSortOrderParam() string {
+	/** invert order when sort direction is not DESC */
+	if f.sortDirection == SortDirectionAsc {
+		if f.order == PaginationOrderPrev {
+			return "DESC"
+		}
+
+		return "ASC"
+	}
+
+	if f.order == PaginationOrderPrev {
+		return "ASC"
+	}
+
+	return "DESC"
+}
+
+func (f *FieldSortNullablePaginator[ItemType]) getSortCompareOperatorParam() string {
+	/** invert order when sort direction is not DESC */
+	if f.sortDirection == SortDirectionAsc {
+		if f.order == PaginationOrderPrev {
+			return "<"
+		}
+
+		return ">"
+	}
+
+	if f.order == PaginationOrderPrev {
+		return ">"
+	}
+
+	return "<"
 }

@@ -55,13 +55,18 @@ func NewFieldSortNullablePaginator[ItemType any](
 			field, okField := compositeStartFrom["field"]
 			if okId && okField {
 				idFloat, ok1 := id.(float64)
-				_, ok2 := field.(string)
-				_, ok3 := field.(float64)
+				fieldString, isFieldString := field.(string)
+				fieldFloat, isFieldInt := field.(float64)
 
-				if ok1 && (ok2 || ok3) {
+				if ok1 && isFieldString {
 					idInt := int(idFloat)
 					v.startFromId = &idInt
-					v.startFromField = &field
+					v.startFromField = fieldString
+				}
+				if ok1 && isFieldInt {
+					idInt := int(idFloat)
+					v.startFromId = &idInt
+					v.startFromField = int(fieldFloat)
 				}
 			}
 		}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	gdh "github.com/KoNekoD/gormite/pkg/gormite_databases_helpers"
 
@@ -56,21 +55,14 @@ func NewFieldSortNullablePaginator[ItemType any](
 			field, okField := compositeStartFrom["field"]
 			if okId && okField {
 				idFloat, ok1 := id.(float64)
-				fieldString, ok2 := field.(string)
+				_, ok2 := field.(string)
 				_, ok3 := field.(int)
 
-				if ok1 {
+				if ok1 && (ok2 || ok3) {
 					idInt := int(idFloat)
 					v.startFromId = &idInt
-
-					if ok2 {
-						fieldTime, _ := time.Parse(time.RFC3339, fieldString)
-						v.startFromField = fieldTime
-					} else if ok3 {
-						v.startFromField = &field
-					}
+					v.startFromField = &field
 				}
-
 			}
 		}
 	}

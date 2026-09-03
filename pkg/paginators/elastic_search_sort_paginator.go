@@ -53,7 +53,7 @@ func NewElasticSearchSortPaginator[ItemType any](
 			if okId && okField {
 				idFloat, ok1 := id.(float64)
 				_, ok2 := field.(string)
-				_, ok3 := field.(int)
+				_, ok3 := field.(float64)
 
 				if ok1 && (ok2 || ok3) {
 					idInt := int(idFloat)

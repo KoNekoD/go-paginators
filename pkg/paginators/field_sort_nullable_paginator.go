@@ -53,7 +53,8 @@ func (f *FieldSortNullablePaginator[ItemType]) getIds() ([]int, error) {
 	qb.
 		Select(f.alias+".id").
 		SetMaxResults(f.limit+1).
-		AddOrderBy(fmt.Sprintf("%s, %s.id", sortField, f.alias), sortOrder)
+		AddOrderBy(sortField, sortOrder).
+		AddOrderBy(f.alias+".id", sortOrder)
 
 	sql, err := qb.GetSQL()
 	if err != nil {
@@ -71,7 +72,8 @@ func (f *FieldSortNullablePaginator[ItemType]) fetchItems(ids []int) ([]*ItemTyp
 
 	qb.
 		SetMaxResults(f.limit+1).
-		AddOrderBy(fmt.Sprintf("%s, %s.id", sortField, f.alias), sortOrder)
+		AddOrderBy(sortField, sortOrder).
+		AddOrderBy(f.alias+".id", sortOrder)
 
 	if len(ids) > 0 {
 		qb.AndWhere(qb.Expr().In(f.alias+".id", qb.PrepareInArgsInt(ids)))

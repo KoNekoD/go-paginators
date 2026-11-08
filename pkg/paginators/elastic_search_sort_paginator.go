@@ -73,17 +73,24 @@ func NewElasticSearchSortPaginator[ItemType any](
 }
 
 func (e *ElasticSearchSortPaginator[ItemType]) getSortOrder() *sortorder.SortOrder {
-	if e.order == PaginationOrderNext {
-		return &sortorder.Desc
+	ascending := e.sortDirection == SortDirectionAsc
+
+	if e.order == PaginationOrderPrev {
+		ascending = !ascending
 	}
-	return &sortorder.Asc
+
+	if ascending {
+		return &sortorder.Asc
+	}
+
+	return &sortorder.Desc
 }
 
 func (e *ElasticSearchSortPaginator[ItemType]) applyPagination() error {
 	e.request.Source_ = types.SourceFilter{Includes: []string{"id", e.sortColumn}}
 
 	if e.startFromId != nil {
-		e.request.SearchAfter = []types.FieldValue{e.startFromField, e.startFromId}
+		e.request.SearchAfter = []types.FieldValue{e.startFromField, *e.startFromId}
 	}
 
 	size := e.limit + 1
@@ -120,7 +127,11 @@ func (e *ElasticSearchSortPaginator[ItemType]) extractSources(resp *search.Respo
 			return nil, errors.WithStack(err)
 		}
 
-		id := int(source["id"].(float64))
+		idFloat, ok := source["id"].(float64)
+		if !ok {
+			return nil, errors.Errorf("hit %v has invalid or missing numeric id", hit.Id_)
+		}
+		id := int(idFloat)
 
 		field := fmt.Sprint(source[e.sortColumn])
 
